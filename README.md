@@ -2,6 +2,20 @@
 
 by team Zdravíme
 
+
+## Outcomes
+
+- [IKEM prevalence data](presentation/ikem_prevalence_results.txt)
+- High ACR risk predictive model
+
+
+## Solution overview
+Based on the medical records, we can give a doctor the risk of a particular patient being in the A2 and A3 CKD risk categories.
+Because the albuminuria is not standardly tested, we can recommend such action to the doctor when actually needed!
+
+![image](https://github.com/Jan-Blaha/HHH23-CKD/assets/36329222/b229c7c5-9e63-4dfe-899f-84f06574d69b)
+
+
 ## Structure of the repository:
 - data/ - placeholder
 - src/ - our solution
@@ -11,12 +25,6 @@ by team Zdravíme
 ## Used technologies:
 - we developed our solutions in Python Jupyter notebooks and Julia.
 - from analytical tools, we relied mostly on statsmodels library and our wit; we also tested causal inference tools and advanced ideas like sum-product-networks for sum-clever-analysis.
-
-## Solution overview
-Based on the medical records, we can give a doctor the risk of a particular patient being in the A2 and A3 CKD risk categories.
-Because the albuminuria is not standardly tested, we can recommend such action to the doctor when actually needed!
-
-![image](https://github.com/Jan-Blaha/HHH23-CKD/assets/36329222/b229c7c5-9e63-4dfe-899f-84f06574d69b)
 
 
 ## Technical detail:
