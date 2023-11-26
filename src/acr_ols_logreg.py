@@ -3,12 +3,14 @@ import numpy as np
 import statsmodels.api as sm
 from pathlib import Path
 import pickle
+import scipy
+import scipy.stats
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 
 
-def fit_model(save=False):
+def fit_ols(save=False, eval=False):
     # open the data
     df = pd.read_csv(Path(__file__).parent.parent / "data" / "honza_jirka_data.csv", delimiter=",")
 
@@ -24,51 +26,53 @@ def fit_model(save=False):
     df.dropna(how='any', axis=0, inplace=True)
     df["x_sex"] = df["x_sex"].map({'M':0, 'F':1})
 
-    # TODO throw out bottom and top 5%
+    # throw out bottom and top 5%
+    bottom_percentile = df["y_ACR"].quantile(0.05)
+    top_percentile = df["y_ACR"].quantile(0.95)
+    df = df.sort_values(by="y_ACR")
+    df = df[(df["y_ACR"] > bottom_percentile) & (df["y_ACR"] < top_percentile)]
+
 
     # train the model
-    y = df["y_ACR"]
-    X = sm.add_constant(df.drop('y_ACR', axis=1).astype(float))
-    mod = sm.OLS(y, X)
-    result = mod.fit()
+    if save:
+        
+        y = df["y_ACR"]
+        X = sm.add_constant(df.drop('y_ACR', axis=1).astype(float))
+        mod = sm.OLS(y, X)
+        result = mod.fit()
 
-    '''p_threshs = np.linspace(0., 0.2, 40)
-    for p_thresh in p_threshs:
+        '''p_threshs = np.linspace(0., 0.2, 40)
+        for p_thresh in p_threshs:
+            high_p_cols = list(result.pvalues[result.pvalues > p_thresh].index)
+            if 'const' in high_p_cols: high_p_cols.remove('const')
+            _df = df.drop(columns=high_p_cols, axis=1)
+            
+            y = _df["y_ACR"]
+            X = sm.add_constant(_df.drop('y_ACR', axis=1).astype(float))
+
+            res = sm.OLS(y, X).fit()
+            print(round(p_thresh, 3), res.aic)'''
+
+        # throw out parameters that have high P-values and drop
+        p_thresh = 0.1
         high_p_cols = list(result.pvalues[result.pvalues > p_thresh].index)
         if 'const' in high_p_cols: high_p_cols.remove('const')
-        _df = df.drop(columns=high_p_cols, axis=1)
-        
-        y = _df["y_ACR"]
-        X = sm.add_constant(_df.drop('y_ACR', axis=1).astype(float))
+        df = df.drop(columns=high_p_cols, axis=1)
 
-        res = sm.OLS(y, X).fit()
-        print(round(p_thresh, 3), res.aic)'''
+        # retrain the model
+        y = df["y_ACR"]
+        X = sm.add_constant(df.drop('y_ACR', axis=1).astype(float))
+        mod = sm.OLS(y, X)
+        result = mod.fit()
+        print(result.summary())
 
-    # throw out parameters that have high P-values and drop
-    p_thresh = 0.1
-    high_p_cols = list(result.pvalues[result.pvalues > 0.1].index)
-    if 'const' in high_p_cols: high_p_cols.remove('const')
-    df = df.drop(columns=high_p_cols, axis=1)
-
-    # retrain the model
-    y = df["y_ACR"]
-    X = sm.add_constant(df.drop('y_ACR', axis=1).astype(float))
-    mod = sm.OLS(y, X)
-    result = mod.fit()
-
-    # sort by the abs coef values
-    sorted_coefficients = result.params.abs().sort_values()[::-1]
-    X_sorted = X[sorted_coefficients.index]
-    model_sorted = sm.OLS(y, X_sorted)
-    result_sorted = model_sorted.fit()
-    print(result_sorted.summary())
-
-    if save:
-        with open('acr_ols.pkl', 'wb') as f:
-            pickle.dump(result_sorted, f)
+        #if save:
+        #    with open('acr_ols.pkl', 'wb') as f:
+        #        pickle.dump(result, f)
+        result.save('acr_ols2.pkl')
 
 
-def predict(data, model='acr_ols.pkl'):
+def predict_acr(data, model='acr_ols.pkl'):
 
     data["x_sex"] = data["x_sex"].map({'M':0, 'F':1})
 
@@ -88,7 +92,16 @@ def predict(data, model='acr_ols.pkl'):
     return pred.predicted_mean, pred.conf_int().squeeze()
 
 
-def fit_log_reg(save=False):
+def risk(pred_mean, pred_sd, risk_threshold):
+    return 1 - scipy.stats.distributions.norm.cdf(risk_threshold, loc=pred_mean, scale=pred_sd)
+
+
+def calculate_risk(data, risk_threshold, model='acr_ols.pkl'):
+    pred_mean, pred_sd = predict_acr(data, model=model)
+    return risk(pred_mean, pred_sd, risk_threshold)
+
+
+def fit_log_reg(save=False, eval=False, max_iter=100):
     # open the data
     df = pd.read_csv(Path(__file__).parent.parent / "data" / "honza_jirka_data.csv", delimiter=",")
 
@@ -102,24 +115,40 @@ def fit_log_reg(save=False):
     df["x_sex"] = df["x_sex"].map({'M':0, 'F':1})
 
     # get label and drop
-    y = np.array(df["y_ACR"].isna().astype(int))
+    y = (~(df["y_ACR"].isna())).astype(int)
     df = df.drop("y_ACR", axis=1)
 
     # get indices of rows with valid features
     indices = df[df.notna().all(axis=1)].index
-    y = y[indices]
+    y = y.loc[indices]
     X = df.loc[indices].astype(float)
 
-    # train model on whole data
-    X = sm.add_constant(X)
-    logreg_model = sm.Logit(y, X)
-    result = logreg_model.fit(disp=True, method='lbfgs')
-    print(result.summary())
+    # k-fold evaluation
+    if eval:
+        accuracies = []
+        kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=420)
+        for i, (trn, tst) in enumerate(kfold.split(X, y)):
+            model = sm.Logit(y.iloc[trn], X.iloc[trn])
+            
+            results = model.fit(disp=True, method='lbfgs', maxiter=max_iter)
+            predictions = (results.predict(X.iloc[tst]) > 0.5).astype(int)
+            accuracy = (predictions == y.iloc[tst]).mean()
+            accuracies.append(accuracy)
 
-    # save model and the columns
+        print(sum(accuracies) / len(accuracies))
+
+
     if save:
-        with open('logreg.pkl', 'wb') as f:
-            pickle.dump(logreg_model, f)
+        # train model on whole data
+        X = sm.add_constant(X)
+        logreg_model = sm.Logit(y, X)
+        result = logreg_model.fit(disp=True, method='lbfgs', maxiter=max_iter)
+        print(result.summary())
+
+        # save model and the columns
+        #with open('logreg.pkl', 'wb') as f:
+        #    pickle.dump(result, f)
+        result.save('logreg.pkl')
 
 
 if __name__ == "__main__":
@@ -127,5 +156,8 @@ if __name__ == "__main__":
     #df = sm.add_constant(df)
     #predict(df.iloc[[2111]])
 
+    # fit ols
+    fit_ols(save=True, eval=False)
+
     # fit logreg
-    fit_log_reg(save=True)
+    #fit_log_reg(save=True, eval=False)
