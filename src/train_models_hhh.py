@@ -145,25 +145,30 @@ monitored_indices = ~df["y_ACR"].isna()
 #monitored_indices = ~pd.isna(y_sub)
 tmp_df = df.loc[monitored_indices]
 columns_to_check = ["d_N18", "d_N18.0", "d_N18.1", "d_N18.2", "d_N18.3", "d_N18.4", "d_N18.5", "d_N18.8", "d_N18.9"]
+all_ckd_diagnosed = df[columns_to_check].any(axis=1)
 ckd_diagnosed = tmp_df[columns_to_check].any(axis=1)
 monitored_nodiag = tmp_df.loc[~ckd_diagnosed]["y_ACR"] > 3
 monitored_diag = np.logical_and(tmp_df["y_ACR"] > 3, ckd_diagnosed)
-print(f"There is {tmp_df.shape[0]} patients WITH monitored values of ACR, out of those:")
+print(f"There are {df.shape[0]} IKEM patient records. Out of those {all_ckd_diagnosed.sum()} have some CKD diagnosis listed in the system.")
+print()
+
+print(f"There are {tmp_df.shape[0]} patients WITH measured values of ACR, out of those:")
 print(f"- {np.sum(ckd_diagnosed)} have some form of CKD")
-print(f"- {np.sum(monitored_nodiag)} have risk of having ACR without having the diagnose")
-print(f"- {np.sum(monitored_diag)} have risk of having ACR and have diagnose of CKD")
+print(f"- {np.sum(monitored_nodiag)} have high ACR without the CKD diagnose")
+print(f"- {np.sum(monitored_diag)} have high ACR with the CKD diagnose")
 
 # not-monitored
 not_monitored_indices = logreg_y == 0
 #tmp_df = df.loc[~monitored_indices]
 risk_A2A3 = risk_A2[not_monitored_indices] > 0.5
 risk_A3 = risk_A3[not_monitored_indices] > 0.5
-print(f"There is {not_monitored_indices.sum()} patients WITHOUT monitored values of ACR, out of those:")
+print(f"There are {not_monitored_indices.sum()} patients WITHOUT monitored ACR. According to our analysis, out of those:")
 print(f"- {np.sum(risk_A2A3)} have HIGHER risk of having CKD")
 print(f"- {np.sum(risk_A3)} have VERY HIGH risk of having CKD")
+print()
 
 print(f"Model callibration to known data:")
 print(f"Actual risk for people we flag (prob of ACR > 3 is estimated > .5) is {(logreg_acr_values.values[(logreg_y == 1) & (risk_A2 > .5)] > 3).mean():.3f}")
-
+print()
 
 
