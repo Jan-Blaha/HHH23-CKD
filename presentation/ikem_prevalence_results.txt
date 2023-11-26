@@ -1,0 +1,12 @@
+There are 61414 IKEM patient records. Out of those 7776 have some CKD diagnosis listed in the system.
+
+There are 10382 patients WITH measured values of ACR, out of those:
+- 3860 have some form of CKD
+- 1361 have high ACR without the CKD diagnose
+- 2278 have high ACR with the CKD diagnose
+There are 50309 patients WITHOUT monitored ACR. According to our analysis, out of those:
+- 26467 have HIGHER risk of having CKD
+- 301 have VERY HIGH risk of having CKD
+
+Model callibration to known data:
+Actual risk for people we flag (prob of ACR > 3 is estimated > .5) is 0.458
